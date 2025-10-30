@@ -1,26 +1,69 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ------------------------ */
+/* Theme Variables          */
+/* ------------------------ */
+@theme {
+  --radius: 0.625rem;
+  --color-background: oklch(1 0 0);
+  --color-foreground: oklch(0.141 0.005 285.823);
+  --color-border: oklch(0.92 0.004 286.32);
+  --color-primary: oklch(0.21 0.006 285.885);
+  --color-secondary: oklch(0.967 0.001 286.375);
+  --color-muted: oklch(0.967 0.001 286.375);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ------------------------ */
+/* Dark Mode Variables      */
+/* ------------------------ */
+@variant dark {
+  --color-background: oklch(0.141 0.005 285.823);
+  --color-foreground: oklch(0.985 0 0);
+  --color-border: oklch(1 0 0 / 10%);
+  --color-primary: oklch(0.92 0.004 286.32);
+  --color-secondary: oklch(0.274 0.006 286.033);
+  --color-muted: oklch(0.274 0.006 286.033);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ------------------------ */
+/* Animation Utilities      */
+/* ------------------------ */
+@layer utilities {
+  @keyframes slide-down {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-slide-down {
+    animation: slide-down 0.3s ease-out;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ------------------------ */
+/* Base Layer Styles        */
+/* ------------------------ */
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Optional custom styling for the shadcn slider */
+[data-slider] {
+  --slider-track-height: 6px;
+}
+[data-slider-thumb] {
+  width: 20px;
+  height: 20px;
+  background-color: #4f46e5; /* Indigo-600 */
 }
