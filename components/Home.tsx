@@ -32,6 +32,7 @@ export default function HomePage() {
   const [showArrows, setShowArrows] = useState(false);
   const [px, setPx] = useState(0);
   const [py, setPy] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
 
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -177,6 +178,52 @@ export default function HomePage() {
         }}
         aria-roledescription="hero"
       >
+        {/* Mute / Unmute Button */}
+        <button
+          onClick={() => setIsMuted((prev) => !prev)}
+          className="absolute z-50 bottom-8 right-6 bg-black/40 hover:bg-black/60 text-white p-3 rounded-full backdrop-blur-sm transition"
+          aria-label={isMuted ? "Unmute videos" : "Mute videos"}
+        >
+          {isMuted ? (
+            // Muted Icon
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="w-5 h-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 9v6h4l5 5V4l-5 5H9z"
+              />
+            </svg>
+          ) : (
+            // Sound Icon
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="w-5 h-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M11 5L6 9H2v6h4l5 4V5z"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15.54 8.46a5 5 0 010 7.07m2.83-9.9a9 9 0 010 12.73"
+              />
+            </svg>
+          )}
+        </button>
         {/* Scrolling container (duplicated media set for infinite loop) */}
         <div
           ref={scrollRef}
@@ -200,7 +247,7 @@ export default function HomePage() {
                   <video
                     src={src}
                     autoPlay
-                    muted
+                    muted={isMuted}
                     loop
                     playsInline
                     className="w-full h-full object-cover"
@@ -223,6 +270,8 @@ export default function HomePage() {
                   <div className="font-semibold text-lg md:text-xl drop-shadow-lg">{`Tour ${
                     visibleIndex + 1
                   }`}</div>
+                  {/* overlay gradient */}
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/10 to-black/60 pointer-events-none" />
                 </div>
 
                 {/* center play hint */}
