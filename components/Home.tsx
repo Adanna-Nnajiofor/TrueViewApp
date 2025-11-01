@@ -45,6 +45,7 @@ export default function HomePage() {
     "/videos/hero3.mp4",
     "/videos/hero4.mp4",
     "/videos/hero5.mp4",
+    "/videos/hero6.jpg",
   ];
 
   // --- mouse parallax for hero ---
