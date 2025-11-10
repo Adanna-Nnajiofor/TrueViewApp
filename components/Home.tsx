@@ -11,16 +11,26 @@ import {
 import { useEffect, useRef, useState } from "react";
 import listings from "@/data/listings";
 import ListingCard from "@/components/ListingCard";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Volume2,
+  VolumeX,
+  Camera,
+  Video,
+  Rocket,
+} from "lucide-react";
 
 /**
- * HomePage — Cinematic TrueView
- * - Hero: auto horizontal looping video carousel (duplicate technique)
+ * HomePage — Enhanced TrueView
+ * - Infinite looping hero (duplicate technique)
  * - Parallax mouse movement + scroll-driven parallax
- * - Section reveal animations using whileInView
- * - Lightbox video preview
+ * - Animated gradient headline
+ * - Lightbox video preview / demo reel
+ * - Sections: About, Featured Tours, How we capture, Partners, Testimonials, CTA
  *
- * Tweak: scrollSpeed, scrollStep, media list, and timing to taste.
+ * Paste into your Next.js project and update video/logo paths as needed.
  */
 
 export default function HomePage() {
@@ -32,7 +42,7 @@ export default function HomePage() {
   const [showArrows, setShowArrows] = useState(false);
   const [px, setPx] = useState(0);
   const [py, setPy] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
 
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -158,11 +168,6 @@ export default function HomePage() {
     }),
   };
 
-  // --- reduce animations if user prefers reduced motion ---
-  if (prefersReducedMotion) {
-    // make animations lighter by setting scroll speed low
-  }
-
   return (
     <div id="home" className="font-sans text-gray-900 antialiased">
       {/* ================= HERO ================= */}
@@ -185,46 +190,9 @@ export default function HomePage() {
           className="absolute z-50 bottom-8 right-6 bg-black/40 hover:bg-black/60 text-white p-3 rounded-full backdrop-blur-sm transition"
           aria-label={isMuted ? "Unmute videos" : "Mute videos"}
         >
-          {isMuted ? (
-            // Muted Icon
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="w-5 h-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 9v6h4l5 5V4l-5 5H9z"
-              />
-            </svg>
-          ) : (
-            // Sound Icon
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="w-5 h-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M11 5L6 9H2v6h4l5 4V5z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15.54 8.46a5 5 0 010 7.07m2.83-9.9a9 9 0 010 12.73"
-              />
-            </svg>
-          )}
+          {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
         </button>
+
         {/* Scrolling container (duplicated media set for infinite loop) */}
         <div
           ref={scrollRef}
@@ -254,12 +222,14 @@ export default function HomePage() {
                     className="w-full h-full object-cover"
                     // prevent video controls from stealing clicks
                     style={{ pointerEvents: "none" }}
+                    preload="metadata"
                   />
                 ) : (
                   <img
                     src={src}
                     alt={`Slide ${visibleIndex + 1}`}
                     className="w-full h-full object-cover"
+                    loading="lazy"
                   />
                 )}
 
@@ -304,9 +274,7 @@ export default function HomePage() {
         {/* top progress + index */}
         <div className="absolute left-6 right-6 top-6 z-40">
           <div className="flex items-center justify-between gap-4">
-            <div className="text-sm text-white/90 font-medium">
-              {`0${currentIndex + 1}`}/{`0${heroMedia.length}`}
-            </div>
+            <div className="text-sm text-white/90 font-medium">TrueView</div>
             <div className="flex-1 mx-4 h-1 bg-white/10 rounded-full overflow-hidden">
               <div
                 className="h-full bg-indigo-500 rounded-full transition-all duration-300"
@@ -315,7 +283,7 @@ export default function HomePage() {
                 }}
               />
             </div>
-            <div className="text-sm text-white/70">{/* placeholder */}</div>
+            <div className="text-sm text-white/70">Cinematic 360° Tours</div>
           </div>
         </div>
 
@@ -348,19 +316,26 @@ export default function HomePage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease: "easeOut" }}
-            className="max-w-4xl w-full backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-8 md:p-12 shadow-2xl"
+            className="max-w-4xl w-full backdrop-blur-md bg-white/8 border border-white/20 rounded-2xl p-8 md:p-12 shadow-2xl"
             role="region"
             aria-labelledby="hero-heading"
           >
             <h1
               id="hero-heading"
-              className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight text-white drop-shadow-[0_6px_20px_rgba(0,0,0,0.6)]"
+              className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-pink-500 to-purple-500"
+              style={{
+                backgroundSize: "200% 200%",
+                backgroundPosition: `${
+                  (currentIndex / heroMedia.length) * 100
+                }% 50%`,
+                transition: "background-position 8s linear",
+              }}
             >
               Reliable Property Coverage • 360° Tours • Visual Excellence
             </h1>
             <p className="mt-4 text-lg md:text-xl text-gray-200 max-w-2xl mx-auto">
               We deliver cinematic tours, aerial cinematography and tailored
-              visual solutions for real estate, hospitality and tourism —
+              visual solutions for real estate, hospitality and tourism,
               trusted, fast and professional.
             </p>
 
@@ -383,6 +358,20 @@ export default function HomePage() {
               >
                 Contact Us
               </motion.a>
+
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                onClick={() => {
+                  // open demo reel lightbox (first mp4 or a separate demo-reel path)
+                  const demoIndex = heroMedia.findIndex((s) =>
+                    s.endsWith(".mp4")
+                  );
+                  openLightbox(demoIndex >= 0 ? demoIndex : 0);
+                }}
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-full border border-white/20 text-white bg-black/20 font-semibold"
+              >
+                🎬 Watch Demo Reel
+              </motion.button>
             </div>
 
             <div className="mt-4 text-xs text-gray-300">
@@ -505,14 +494,17 @@ export default function HomePage() {
                 {
                   title: "Immersive Experience",
                   desc: "High-fidelity 360° tours that let buyers explore every corner.",
+                  icon: <Camera size={28} className="text-indigo-600" />,
                 },
                 {
                   title: "Expert Listings",
                   desc: "Curated tours and media that highlight value and design.",
+                  icon: <Video size={28} className="text-indigo-600" />,
                 },
                 {
                   title: "Trusted Service",
                   desc: "Fast delivery, reliable support and secure asset delivery.",
+                  icon: <Rocket size={28} className="text-indigo-600" />,
                 },
               ].map((item, idx) => (
                 <motion.div
@@ -522,6 +514,7 @@ export default function HomePage() {
                   transition={{ delay: idx * 0.12 }}
                   className="p-6 bg-white/80 backdrop-blur-sm rounded-xl shadow hover:shadow-xl transition transform hover:-translate-y-1"
                 >
+                  <div className="flex justify-center mb-3">{item.icon}</div>
                   <h4 className="font-semibold text-xl mb-2">{item.title}</h4>
                   <p className="text-gray-700">{item.desc}</p>
                 </motion.div>
