@@ -22,17 +22,6 @@ import {
   Rocket,
 } from "lucide-react";
 
-/**
- * HomePage — Enhanced TrueView
- * - Infinite looping hero (duplicate technique)
- * - Parallax mouse movement + scroll-driven parallax
- * - Animated gradient headline
- * - Lightbox video preview / demo reel
- * - Sections: About, Featured Tours, How we capture, Partners, Testimonials, CTA
- *
- * Paste into your Next.js project and update video/logo paths as needed.
- */
-
 export default function HomePage() {
   const prefersReducedMotion = useReducedMotion();
   const heroRef = useRef<HTMLDivElement | null>(null);
@@ -48,7 +37,6 @@ export default function HomePage() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Hero media (local files in /public/videos)
   const heroMedia = [
     "/videos/hero1.mp4",
     "/videos/hero2.mp4",
@@ -58,7 +46,6 @@ export default function HomePage() {
     "/videos/hero6.jpg",
   ];
 
-  // --- mouse parallax for hero ---
   useEffect(() => {
     if (prefersReducedMotion) return;
     const root = heroRef.current;
@@ -67,7 +54,6 @@ export default function HomePage() {
       const r = root.getBoundingClientRect();
       const x = (e.clientX - r.left) / r.width - 0.5;
       const y = (e.clientY - r.top) / r.height - 0.5;
-      // gentle smoothing
       setPx((prev) => prev * 0.86 + x * 0.14);
       setPy((prev) => prev * 0.86 + y * 0.14);
     };
@@ -75,16 +61,14 @@ export default function HomePage() {
     return () => window.removeEventListener("mousemove", onMove);
   }, [prefersReducedMotion]);
 
-  // --- continuous auto-scroll for hero (duplicate technique for seamless loop) ---
   useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
     let raf = 0;
-    const scrollSpeed = 0.6; // px per frame (adjust)
+    const scrollSpeed = 0.6;
     const step = () => {
       if (container && !isPaused && !lightboxOpen) {
         container.scrollLeft += scrollSpeed;
-        // reset to the first half when we've scrolled past it
         if (container.scrollLeft >= container.scrollWidth / 2) {
           container.scrollLeft =
             container.scrollLeft - container.scrollWidth / 2;
@@ -96,7 +80,6 @@ export default function HomePage() {
     return () => cancelAnimationFrame(raf);
   }, [isPaused, lightboxOpen]);
 
-  // --- compute currentIndex from scroll position ---
   useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
@@ -106,7 +89,6 @@ export default function HomePage() {
       ticking = true;
       requestAnimationFrame(() => {
         const w = container.clientWidth;
-        // limit to original length using modulo
         const idx = Math.round(
           (container.scrollLeft % (w * heroMedia.length)) / w
         );
@@ -119,12 +101,10 @@ export default function HomePage() {
     return () => container.removeEventListener("scroll", onScroll);
   }, [heroMedia.length]);
 
-  // --- scroll to slide (one page) helper (wrap aware) ---
   const scrollToSlide = (offset = 0) => {
     const container = scrollRef.current;
     if (!container) return;
     const w = container.clientWidth;
-    // current base index (within 0..n-1)
     const baseIndex = Math.round(
       (container.scrollLeft % (w * heroMedia.length)) / w
     );
@@ -142,23 +122,20 @@ export default function HomePage() {
   const scrollByAmount = (direction: "left" | "right") =>
     scrollToSlide(direction === "right" ? 1 : -1);
 
-  // --- lightbox handlers ---
   const openLightbox = (index: number) => {
     setLightboxIndex(index);
     setLightboxOpen(true);
     setIsPaused(true);
   };
+
   const closeLightbox = () => {
     setLightboxOpen(false);
     setIsPaused(false);
   };
 
-  // --- scroll-driven parallax for section backgrounds ---
-  // Transform values used for subtle background translate on scroll
-  const yTransformLarge = useTransform(scrollY, [0, 800], [0, -60]); // slow ascent
+  const yTransformLarge = useTransform(scrollY, [0, 800], [0, -60]);
   const yTransformSmall = useTransform(scrollY, [0, 800], [0, -28]);
 
-  // --- framer variants for reveal ---
   const sectionVariant: Variants = {
     hidden: { opacity: 0, y: 18 },
     visible: (i = 0) => ({
@@ -184,7 +161,7 @@ export default function HomePage() {
         }}
         aria-roledescription="hero"
       >
-        {/* Mute / Unmute Button */}
+        {/* Mute / Unmute */}
         <button
           onClick={() => setIsMuted((prev) => !prev)}
           className="absolute z-50 bottom-8 right-6 bg-black/40 hover:bg-black/60 text-white p-3 rounded-full backdrop-blur-sm transition"
@@ -193,14 +170,11 @@ export default function HomePage() {
           {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
         </button>
 
-        {/* Scrolling container (duplicated media set for infinite loop) */}
+        {/* Hero scroll */}
         <div
           ref={scrollRef}
           className="flex h-full w-full overflow-x-hidden snap-x snap-mandatory"
-          style={{
-            // subtle parallax transform
-            transform: `translate3d(${px * 10}px, ${py * 6}px, 0)`,
-          }}
+          style={{ transform: `translate3d(${px * 10}px, ${py * 6}px, 0)` }}
         >
           {[...heroMedia, ...heroMedia].map((src, idx) => {
             const visibleIndex = idx % heroMedia.length;
@@ -220,7 +194,6 @@ export default function HomePage() {
                     loop
                     playsInline
                     className="w-full h-full object-cover"
-                    // prevent video controls from stealing clicks
                     style={{ pointerEvents: "none" }}
                     preload="metadata"
                   />
@@ -233,61 +206,13 @@ export default function HomePage() {
                   />
                 )}
 
-                {/* caption + index */}
-                <div className="absolute left-6 bottom-6 text-white z-20">
-                  <div className="text-xs uppercase tracking-wide text-indigo-200/90">
-                    Experience
-                  </div>
-                  <div className="font-semibold text-lg md:text-xl drop-shadow-lg">{`Tour ${
-                    visibleIndex + 1
-                  }`}</div>
-                  {/* overlay gradient */}
-                  <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/10 to-black/60 pointer-events-none" />
-                </div>
-
-                {/* center play hint */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-                  <div className="w-12 h-12 rounded-full bg-black/30 flex items-center justify-center backdrop-blur-sm">
-                    <svg
-                      className="w-5 h-5 text-white"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                    >
-                      <path
-                        d="M5 3v18l15-9L5 3z"
-                        strokeWidth="1.4"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </div>
-                </div>
-
-                {/* overlay gradient */}
                 <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/10 to-black/60 pointer-events-none" />
               </div>
             );
           })}
         </div>
 
-        {/* top progress + index */}
-        <div className="absolute left-6 right-6 top-6 z-40">
-          <div className="flex items-center justify-between gap-4">
-            <div className="text-sm text-white/90 font-medium">TrueView</div>
-            <div className="flex-1 mx-4 h-1 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-indigo-500 rounded-full transition-all duration-300"
-                style={{
-                  width: `${((currentIndex + 1) / heroMedia.length) * 100}%`,
-                }}
-              />
-            </div>
-            <div className="text-sm text-white/70">Cinematic 360° Tours</div>
-          </div>
-        </div>
-
-        {/* arrows */}
+        {/* Arrows */}
         <motion.button
           onClick={() => scrollByAmount("left")}
           initial={{ opacity: 0 }}
@@ -310,7 +235,7 @@ export default function HomePage() {
           <ChevronRight size={20} />
         </motion.button>
 
-        {/* Hero text overlay */}
+        {/* Hero overlay text */}
         <div className="absolute inset-0 flex items-center justify-center text-center px-6">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -335,8 +260,7 @@ export default function HomePage() {
             </h1>
             <p className="mt-4 text-lg md:text-xl text-gray-200 max-w-2xl mx-auto">
               We deliver cinematic tours, aerial cinematography and tailored
-              visual solutions for real estate, hospitality and tourism,
-              trusted, fast and professional.
+              visual solutions for real estate, hospitality and tourism.
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -350,7 +274,6 @@ export default function HomePage() {
               >
                 Explore Virtual Tours
               </motion.a>
-
               <motion.a
                 whileHover={{ scale: 1.03 }}
                 className="inline-block border border-white/20 bg-white/8 text-white px-6 py-3 rounded-full font-semibold backdrop-blur-sm"
@@ -358,11 +281,9 @@ export default function HomePage() {
               >
                 Contact Us
               </motion.a>
-
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 onClick={() => {
-                  // open demo reel lightbox (first mp4 or a separate demo-reel path)
                   const demoIndex = heroMedia.findIndex((s) =>
                     s.endsWith(".mp4")
                   );
@@ -372,10 +293,6 @@ export default function HomePage() {
               >
                 🎬 Watch Demo Reel
               </motion.button>
-            </div>
-
-            <div className="mt-4 text-xs text-gray-300">
-              <span>On-site 360° capture • Drone & aerial • Fast delivery</span>
             </div>
           </motion.div>
         </div>
@@ -402,7 +319,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ============ SECTIONS WITH REVEAL & SCROLL PARALLAX ============ */}
+      {/* ============ MAIN SECTIONS ============ */}
       <main>
         {/* Featured Virtual Tours */}
         <motion.section
@@ -415,7 +332,6 @@ export default function HomePage() {
           <motion.h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-8 text-center">
             Featured Virtual Tours
           </motion.h2>
-
           <motion.div className="grid sm:grid-cols-2 md:grid-cols-3 gap-8">
             {listings.slice(0, 3).map((item, i) => (
               <motion.div key={item.slug} variants={sectionVariant} custom={i}>
@@ -423,7 +339,6 @@ export default function HomePage() {
               </motion.div>
             ))}
           </motion.div>
-
           <div className="text-center mt-12">
             <Link
               href="#listings"
@@ -434,7 +349,7 @@ export default function HomePage() {
           </div>
         </motion.section>
 
-        {/* Testimonials with slight scroll-parallax background */}
+        {/* Testimonials */}
         <motion.section
           initial="hidden"
           whileInView="visible"
@@ -476,7 +391,7 @@ export default function HomePage() {
           </div>
         </motion.section>
 
-        {/* ===== WHY CHOOSE US ===== */}
+        {/* Why Choose Us */}
         <section className="bg-gradient-to-b from-white/50 to-gray-50 py-20">
           <div className="max-w-5xl mx-auto px-6 text-center">
             <motion.h3
@@ -488,7 +403,6 @@ export default function HomePage() {
             >
               Why Choose TrueView?
             </motion.h3>
-
             <div className="grid md:grid-cols-3 gap-8">
               {[
                 {
@@ -523,66 +437,86 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* CTA Strip */}
+        {/* ===== BECOME A HOST SECTION ===== */}
         <motion.section
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true }}
-          className="py-12"
+          viewport={{ once: true, margin: "-120px" }}
+          className="py-20 text-white relative overflow-hidden rounded-2xl"
+          style={{
+            background: "linear-gradient(270deg, #6366F1, #8B5CF6, #EC4899)",
+            backgroundSize: "600% 600%",
+            animation: "gradient-slide 16s ease infinite",
+          }}
         >
-          <div className="max-w-6xl mx-auto px-6 bg-indigo-700 rounded-2xl text-white p-8 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div>
-              <h4 className="text-xl font-semibold">
-                Ready to showcase your space?
-              </h4>
-              <p className="text-sm text-indigo-100/90">
-                Book a demo scan or request a tailored media package.
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <Link
-                href="#pricing"
-                className="px-4 py-2 bg-white text-indigo-700 rounded-md font-semibold"
+          <motion.div
+            className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-8"
+            variants={{
+              hidden: {},
+              visible: { transition: { staggerChildren: 0.15 } },
+            }}
+          >
+            <motion.div
+              className="md:w-2/3 text-center md:text-left"
+              variants={{
+                hidden: { opacity: 0, y: 20 },
+                visible: { opacity: 1, y: 0, transition: { duration: 0.6 } },
+              }}
+            >
+              <motion.h3 className="text-3xl md:text-4xl font-bold mb-4">
+                Have a space to share?
+              </motion.h3>
+              <motion.p className="text-lg md:text-xl text-white/90 mb-6">
+                Become a host and list your property with us. Earn money while
+                showcasing your space to a wide audience.
+              </motion.p>
+            </motion.div>
+
+            <motion.div className="flex gap-4">
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0, x: 80 },
+                  visible: { opacity: 1, x: 0, transition: { duration: 0.6 } },
+                }}
               >
-                View Pricing
-              </Link>
-              <a
-                href="https://wa.me/2348012345678?text=Hello%20TrueView!%20I%27d%20like%20to%20make%20an%20inquiry."
-                target="_blank"
-                rel="noreferrer"
-                className="px-4 py-2 bg-green-500 text-white rounded-md font-semibold"
+                <Link
+                  href="/host"
+                  className="px-6 py-3 bg-white text-indigo-700 rounded-full font-semibold shadow-lg hover:shadow-xl transition transform hover:-translate-y-1"
+                >
+                  Become a Host
+                </Link>
+              </motion.div>
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0, x: -80 },
+                  visible: { opacity: 1, x: 0, transition: { duration: 0.6 } },
+                }}
               >
-                Chat on WhatsApp
-              </a>
-            </div>
-          </div>
+                <a
+                  href="#contact"
+                  className="px-6 py-3 border border-white/50 rounded-full font-semibold hover:bg-white/20 transition"
+                >
+                  Learn More
+                </a>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+
+          <style jsx>{`
+            @keyframes gradient-slide {
+              0% {
+                background-position: 0% 50%;
+              }
+              50% {
+                background-position: 100% 50%;
+              }
+              100% {
+                background-position: 0% 50%;
+              }
+            }
+          `}</style>
         </motion.section>
       </main>
-
-      <style jsx>{`
-        .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-        }
-        .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-
-        /* moving gradient overlay for hero slides */
-        @keyframes gradient-x {
-          0%,
-          100% {
-            background-position: 0% 50%;
-          }
-          50% {
-            background-position: 100% 50%;
-          }
-        }
-        .animate-gradient-x {
-          animation: gradient-x 14s ease infinite;
-          background-size: 200% 200%;
-        }
-      `}</style>
     </div>
   );
 }
