@@ -3,37 +3,51 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+
 import { auth, db, storage } from "../../../firebaseConfig";
+import { onAuthStateChanged, User } from "firebase/auth";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { onAuthStateChanged } from "firebase/auth";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile } from "@ffmpeg/util";
+
+import type { HostListing } from "@/lib/types";
 
 export default function UploadListing() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+
+  const [user, setUser] = useState<User | null>(null);
   const [files, setFiles] = useState<FileList | null>(null);
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
+  const [progress, setProgress] = useState(0);
+
+  // Initialize formData using HostListing (excluding hostId & id)
+  const [formData, setFormData] = useState<Omit<HostListing, "id" | "hostId">>({
     name: "",
-    email: "",
     spaceType: "",
     location: "",
     message: "",
+    media: [],
   });
 
+  // Initialize FFmpeg
+  const ffmpeg = new FFmpeg();
+
+  // -----------------------------
+  // AUTH VALIDATION
+  // -----------------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (!currentUser) {
-        router.push("/host/login");
-      } else {
-        setUser(currentUser);
-        setFormData((prev) => ({ ...prev, email: currentUser.email || "" }));
-      }
+      if (!currentUser) router.push("/host/login");
+      else setUser(currentUser);
     });
-
     return () => unsubscribe();
   }, [router]);
 
+  // -----------------------------
+  // FORM HANDLERS
+  // -----------------------------
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
@@ -44,57 +58,145 @@ export default function UploadListing() {
     setFiles(e.target.files);
   };
 
-  const handleUpload = async () => {
-    if (!files || files.length === 0) return [];
-    const urls: string[] = [];
-    for (const file of Array.from(files)) {
-      const fileRef = ref(
-        storage,
-        `host-spaces/${user.uid}/${Date.now()}-${file.name}`
-      );
-      await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
-      urls.push(url);
+  // -----------------------------
+  // COMPRESS VIDEO
+  // -----------------------------
+  const compressVideo = async (file: File): Promise<File> => {
+    if (!ffmpeg.loaded) await ffmpeg.load();
+
+    await ffmpeg.writeFile(file.name, await fetchFile(file));
+
+    await ffmpeg.exec([
+      "-i",
+      file.name,
+      "-vcodec",
+      "libx264",
+      "-crf",
+      "28",
+      "-preset",
+      "fast",
+      "-movflags",
+      "+faststart",
+      `compressed-${file.name}`,
+    ]);
+
+    const data = await ffmpeg.readFile(`compressed-${file.name}`);
+
+    if (typeof data === "string") {
+      // Rare case: FFmpeg returned a string, convert to Uint8Array
+      const bytes = new TextEncoder().encode(data);
+      return new File([bytes], file.name, { type: "video/mp4" });
+    } else {
+      // Normal case: Uint8Array
+      const bytes = new Uint8Array(data); // ensure standard Uint8Array
+      return new File([bytes], file.name, { type: "video/mp4" });
     }
-    return urls;
   };
 
+  // -----------------------------
+  // UPLOAD FILE WITH PROGRESS
+  // -----------------------------
+  const uploadFileWithProgress = (
+    file: File,
+    index: number,
+    totalFiles: number
+  ): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const fileRef = ref(
+        storage,
+        `host-spaces/${user?.uid}/${Date.now()}-${file.name}`
+      );
+
+      const uploadTask = uploadBytesResumable(fileRef, file);
+
+      uploadTask.on(
+        "state_changed",
+        (snapshot) => {
+          const percent =
+            (snapshot.bytesTransferred / snapshot.totalBytes / totalFiles) *
+            100;
+          setProgress((prev) => Math.min(prev + percent, 100));
+        },
+        reject,
+        async () => {
+          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          resolve(url);
+        }
+      );
+    });
+  };
+
+  // -----------------------------
+  // HANDLE ALL FILES
+  // -----------------------------
+  const processFiles = async (): Promise<string[]> => {
+    if (!files || files.length === 0) return [];
+
+    const totalFiles = files.length;
+
+    const preparedFiles: File[] = await Promise.all(
+      Array.from(files).map(async (file) =>
+        file.type.startsWith("video/") ? compressVideo(file) : file
+      )
+    );
+
+    const uploadedUrls: string[] = await Promise.all(
+      preparedFiles.map((file, idx) =>
+        uploadFileWithProgress(file, idx, totalFiles)
+      )
+    );
+
+    return uploadedUrls;
+  };
+
+  // -----------------------------
+  // SUBMIT HANDLER
+  // -----------------------------
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) {
-      alert("You must be logged in to upload a listing.");
-      return;
-    }
+    if (!user) return alert("You must be logged in.");
+    if (!files || files.length === 0) return alert("Upload at least one file.");
 
     setLoading(true);
-    try {
-      const uploadedUrls = await handleUpload();
+    setProgress(0);
 
-      await addDoc(collection(db, "hostSpaces"), {
+    try {
+      const uploadedUrls = await processFiles();
+
+      const listing: HostListing = {
         ...formData,
         media: uploadedUrls,
         hostId: user.uid,
+        id: "", // Firestore will generate this
+      };
+
+      await addDoc(collection(db, "hostSpaces"), {
+        ...listing,
         createdAt: serverTimestamp(),
       });
 
-      alert("Your space has been listed successfully!");
+      alert("Your listing has been uploaded successfully!");
       setFormData({
         name: "",
-        email: user.email || "",
         spaceType: "",
         location: "",
         message: "",
+        media: [],
       });
       setFiles(null);
+      setProgress(0);
       router.push("/host/dashboard");
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      alert("Failed to upload listing. Try again.");
+      alert("Failed to upload listing. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  // -----------------------------
+  // UI
+  // -----------------------------
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white text-gray-900 flex items-center justify-center px-4">
       <motion.div
@@ -107,99 +209,112 @@ export default function UploadListing() {
           Upload Your Space
         </h2>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid md:grid-cols-2 gap-6">
+        {!user ? (
+          <p className="text-center text-gray-500">Loading...</p>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-800 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Email</label>
+                <input
+                  type="email"
+                  value={user.email || ""}
+                  disabled
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100 text-gray-500 cursor-not-allowed"
+                />
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Type of Space
+                </label>
+                <input
+                  type="text"
+                  name="spaceType"
+                  value={formData.spaceType}
+                  onChange={handleChange}
+                  required
+                  placeholder="Apartment, Hall, Studio..."
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-800 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Location
+                </label>
+                <input
+                  type="text"
+                  name="location"
+                  value={formData.location}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-800 outline-none"
+                />
+              </div>
+            </div>
+
             <div>
               <label className="block text-sm font-medium mb-2">
-                Full Name
+                Description
               </label>
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
+              <textarea
+                name="message"
+                rows={4}
+                value={formData.message}
                 onChange={handleChange}
-                required
+                placeholder="Tell us more about your space..."
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-800 outline-none"
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2">Email</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                disabled
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100 text-gray-500 cursor-not-allowed"
-              />
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium mb-2">
-                Type of Space
+                Upload Photos or Videos
               </label>
               <input
-                type="text"
-                name="spaceType"
-                value={formData.spaceType}
-                onChange={handleChange}
-                placeholder="Apartment, Hall, Studio..."
-                required
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-800 outline-none"
+                type="file"
+                accept="image/*, video/*"
+                multiple
+                onChange={handleFileChange}
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2">Location</label>
-              <input
-                type="text"
-                name="location"
-                value={formData.location}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-800 outline-none"
-              />
-            </div>
-          </div>
+            {loading && (
+              <div className="w-full bg-gray-200 rounded-full h-4 mt-2">
+                <div
+                  className="bg-gray-900 h-4 rounded-full transition-all"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            )}
 
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Description
-            </label>
-            <textarea
-              name="message"
-              value={formData.message}
-              onChange={handleChange}
-              rows={4}
-              placeholder="Tell us more about your space..."
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-800 outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Upload Photos or Videos
-            </label>
-            <input
-              type="file"
-              accept="image/*, video/*"
-              multiple
-              onChange={handleFileChange}
-              className="w-full"
-            />
-          </div>
-
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 bg-gray-900 text-white font-medium rounded-xl shadow-md hover:bg-gray-800 transition"
-          >
-            {loading ? "Uploading..." : "Submit Listing"}
-          </motion.button>
-        </form>
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 bg-gray-900 text-white rounded-xl shadow-md hover:bg-gray-800 transition"
+            >
+              {loading
+                ? `Uploading ${Math.round(progress)}%`
+                : "Submit Listing"}
+            </motion.button>
+          </form>
+        )}
       </motion.div>
     </div>
   );

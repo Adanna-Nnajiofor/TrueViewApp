@@ -8,8 +8,7 @@ import { FaSignInAlt, FaGoogle, FaFacebook } from "react-icons/fa";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { loginWithEmail, loginWithOAuth, userData, refreshUserData } =
-    useAuth();
+  const { loginWithEmail, loginWithOAuth } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,38 +16,53 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // EMAIL LOGIN
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
     try {
-      await loginWithEmail(email, password);
-      await refreshUserData();
+      const data = await loginWithEmail(email, password);
 
-      if (!userData) {
-        setError("You must register before logging in.");
+      if (!data) {
+        setError("No account found. Please register first.");
+        setLoading(false);
+        return;
+      }
+
+      if (data.role !== role) {
+        setError(`This account is registered as a ${data.role}.`);
+        setLoading(false);
         return;
       }
 
       router.push(role === "host" ? "/host/dashboard" : "/listings");
     } catch (err: any) {
-      setError(err.message);
+      setError("Invalid email or password. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  // OAUTH LOGIN (AUTO ROLE DETECTION)
   const handleOAuthLogin = async (provider: "google" | "facebook") => {
     setError("");
     setLoading(true);
 
     try {
-      await loginWithOAuth(provider, role);
-      await refreshUserData();
-      router.push(role === "host" ? "/host/dashboard" : "/listings");
+      const data = await loginWithOAuth(provider);
+
+      if (!data) {
+        setError("No account found. Please register first.");
+        setLoading(false);
+        return;
+      }
+
+      // Redirect based on stored Firestore role
+      router.push(data.role === "host" ? "/host/dashboard" : "/listings");
     } catch (err: any) {
-      setError(err.message);
+      setError("OAuth login failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -61,7 +75,7 @@ export default function LoginPage() {
           <FaSignInAlt /> Login
         </h2>
 
-        {/* Role Selection */}
+        {/* Role Selector */}
         <div className="mb-4 flex justify-center gap-4">
           <button
             onClick={() => setRole("user")}
@@ -108,6 +122,7 @@ export default function LoginPage() {
           </button>
         </form>
 
+        {/* OAuth Logins */}
         <div className="mt-5 flex flex-col gap-3">
           <button
             onClick={() => handleOAuthLogin("google")}

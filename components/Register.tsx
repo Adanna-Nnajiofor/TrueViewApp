@@ -24,9 +24,18 @@ export default function RegisterPage() {
 
     try {
       await signupWithEmail(email, password, displayName, role);
+
+      // Redirect after signup
       router.push(role === "host" ? "/host/dashboard" : "/listings");
     } catch (err: any) {
-      setError(err.message);
+      const msg =
+        err?.code === "auth/email-already-in-use"
+          ? "Email is already registered."
+          : err?.code === "auth/weak-password"
+          ? "Password should be at least 6 characters."
+          : err?.message || "Registration failed. Please try again.";
+
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -35,11 +44,13 @@ export default function RegisterPage() {
   const handleOAuthSignup = async (provider: "google" | "facebook") => {
     setError("");
     setLoading(true);
+
     try {
       await signupWithOAuth(provider, role);
+
       router.push(role === "host" ? "/host/dashboard" : "/listings");
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "OAuth signup failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -62,6 +73,7 @@ export default function RegisterPage() {
           >
             User
           </button>
+
           <button
             onClick={() => setRole("host")}
             className={`px-4 py-2 rounded-lg ${
@@ -80,16 +92,18 @@ export default function RegisterPage() {
             onChange={(e) => setDisplayName(e.target.value)}
             className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-green-500"
           />
+
           <input
             type="email"
-            placeholder="Email"
+            placeholder="Email Address"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-green-500"
           />
+
           <input
             type="password"
-            placeholder="Password"
+            placeholder="Password (min 6 chars)"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-green-500"
@@ -106,14 +120,15 @@ export default function RegisterPage() {
           </button>
         </form>
 
-        {/* OAuth Signups */}
+        {/* OAuth Options */}
         <div className="mt-5 flex flex-col gap-3">
           <button
             onClick={() => handleOAuthSignup("google")}
             disabled={loading}
             className="flex items-center justify-center gap-2 w-full border border-gray-300 py-2 rounded-lg hover:bg-gray-100 transition"
           >
-            <FaGoogle className="text-red-500" /> Sign up with Google
+            <FaGoogle className="text-red-500" />
+            Sign Up with Google
           </button>
 
           <button
@@ -121,7 +136,8 @@ export default function RegisterPage() {
             disabled={loading}
             className="flex items-center justify-center gap-2 w-full border border-gray-300 py-2 rounded-lg hover:bg-gray-100 transition"
           >
-            <FaFacebook className="text-blue-600" /> Sign up with Facebook
+            <FaFacebook className="text-blue-600" />
+            Sign Up with Facebook
           </button>
         </div>
 

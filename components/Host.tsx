@@ -16,14 +16,20 @@ export default function HostPage() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-        const data = userDoc.data();
-        setUserData(data);
+        if (userDoc.exists()) {
+          setUserData(userDoc.data());
+        } else {
+          console.warn("User doc not found!");
+        }
+      } else {
+        // Optional redirect if not logged in
+        router.push("/host/login");
       }
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [router]);
 
   if (loading) {
     return (
@@ -37,7 +43,6 @@ export default function HostPage() {
 
   return (
     <div className="min-h-screen relative bg-gray-50 text-gray-900">
-      {/* Background Video */}
       <motion.video
         autoPlay
         muted
@@ -51,10 +56,8 @@ export default function HostPage() {
         <source src="/videos/hero6.mp4" type="video/mp4" />
       </motion.video>
 
-      {/* Gradient Overlay */}
       <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-black/20 via-white/40 to-white/80" />
 
-      {/* Content */}
       <section className="relative z-10 flex flex-col items-center justify-center text-center px-6 py-24 md:py-32">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -64,7 +67,7 @@ export default function HostPage() {
         >
           <h1 className="text-4xl md:text-6xl font-extrabold mb-4 text-gray-900">
             {isHost
-              ? `Welcome back, ${userData.displayName}!`
+              ? `Welcome back, ${userData?.displayName || "Host"}!`
               : "Welcome, Host!"}
           </h1>
           <p className="text-lg md:text-xl text-gray-700 mb-8">
@@ -73,7 +76,6 @@ export default function HostPage() {
               : "Log in as a host to manage your listings and start earning."}
           </p>
 
-          {/* Call-to-action buttons */}
           {isHost ? (
             <motion.button
               whileHover={{ scale: 1.05, backgroundColor: "#111827" }}
