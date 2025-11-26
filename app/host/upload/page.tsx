@@ -4,25 +4,29 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 
-import { auth, db, storage } from "../../../firebaseConfig";
+import { auth, db } from "../../../firebaseConfig";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile } from "@ffmpeg/util";
 
 import type { HostListing } from "@/lib/types";
 
+import imageCompression from "browser-image-compression";
+
+type FileWithPreview = {
+  file: File;
+  preview: string;
+  progress: number;
+  status: "pending" | "uploading" | "success" | "error";
+  secureUrl?: string;
+  abortController?: AbortController;
+};
+
 export default function UploadListing() {
   const router = useRouter();
-
   const [user, setUser] = useState<User | null>(null);
-  const [files, setFiles] = useState<FileList | null>(null);
+  const [files, setFiles] = useState<FileWithPreview[]>([]);
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState(0);
 
-  // Initialize formData using HostListing (excluding hostId & id)
   const [formData, setFormData] = useState<Omit<HostListing, "id" | "hostId">>({
     name: "",
     spaceType: "",
@@ -31,151 +35,200 @@ export default function UploadListing() {
     media: [],
   });
 
-  // Initialize FFmpeg
-  const ffmpeg = new FFmpeg();
+  const MAX_FILES = 5;
+  const MAX_FILE_SIZE_MB = 10;
 
   // -----------------------------
   // AUTH VALIDATION
   // -----------------------------
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsub = onAuthStateChanged(auth, (currentUser) => {
       if (!currentUser) router.push("/host/login");
       else setUser(currentUser);
     });
-    return () => unsubscribe();
+    return () => unsub();
   }, [router]);
 
   // -----------------------------
-  // FORM HANDLERS
+  // FORM INPUT HANDLER
   // -----------------------------
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
+  const handleChange = (e: any) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
+
+  // -----------------------------
+  // FILE HANDLER
+  // -----------------------------
+  const handleFiles = async (selectedFiles: FileList) => {
+    const arr = Array.from(selectedFiles).slice(0, MAX_FILES - files.length);
+    const validFiles: FileWithPreview[] = [];
+
+    for (const file of arr) {
+      let processedFile = file;
+      const sizeMB = file.size / (1024 * 1024);
+
+      //  1. Handle images: compress if above Cloudinary limit
+      if (file.type.startsWith("image/") && sizeMB > MAX_FILE_SIZE_MB) {
+        try {
+          processedFile = await imageCompression(file, {
+            maxSizeMB: MAX_FILE_SIZE_MB - 0.5, // Always keep below 10MB limit
+            maxWidthOrHeight: 1920,
+            useWebWorker: true,
+          });
+
+          console.log(
+            `${file.name} compressed to ${(
+              processedFile.size /
+              1024 /
+              1024
+            ).toFixed(2)}MB`
+          );
+        } catch (err) {
+          console.error("Image compression error:", err);
+          alert(`Failed to compress ${file.name}, skipping this file.`);
+          continue;
+        }
+      }
+
+      //  2. Handle videos: skip if large
+      if (file.type.startsWith("video/") && sizeMB > MAX_FILE_SIZE_MB) {
+        alert(
+          `${file.name} is a video larger than ${MAX_FILE_SIZE_MB}MB and cannot be uploaded on a free Cloudinary plan.`
+        );
+        continue;
+      }
+
+      //  3. Add processed file to preview list
+      validFiles.push({
+        file: processedFile,
+        preview: URL.createObjectURL(processedFile),
+        progress: 0,
+        status: "pending",
+      });
+    }
+
+    //  4. Update state
+    if (validFiles.length > 0) {
+      setFiles((prev) => [...prev, ...validFiles]);
+    }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFiles(e.target.files);
+  const handleFileInputChange = (e: any) => {
+    if (!e.target.files) return;
+    handleFiles(e.target.files);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (!e.dataTransfer.files) return;
+    handleFiles(e.dataTransfer.files);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) =>
+    e.preventDefault();
+
+  const removeFile = (index: number) => {
+    const fileToRevoke = files[index];
+    fileToRevoke.abortController?.abort();
+    URL.revokeObjectURL(fileToRevoke.preview);
+    setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   // -----------------------------
-  // COMPRESS VIDEO
+  // UPLOAD FILE
   // -----------------------------
-  const compressVideo = async (file: File): Promise<File> => {
-    if (!ffmpeg.loaded) await ffmpeg.load();
+  const uploadFile = async (fileObj: FileWithPreview, index: number) => {
+    try {
+      setFiles((prev) =>
+        prev.map((f, i) =>
+          i === index ? { ...f, status: "uploading", progress: 0 } : f
+        )
+      );
 
-    await ffmpeg.writeFile(file.name, await fetchFile(file));
+      const formData = new FormData();
+      formData.append("file", fileObj.file);
+      // optional folder name
+      formData.append("folder", "hostSpaces");
 
-    await ffmpeg.exec([
-      "-i",
-      file.name,
-      "-vcodec",
-      "libx264",
-      "-crf",
-      "28",
-      "-preset",
-      "fast",
-      "-movflags",
-      "+faststart",
-      `compressed-${file.name}`,
-    ]);
+      const abortController = new AbortController();
+      fileObj.abortController = abortController;
 
-    const data = await ffmpeg.readFile(`compressed-${file.name}`);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+        signal: abortController.signal,
+      });
 
-    if (typeof data === "string") {
-      // Rare case: FFmpeg returned a string, convert to Uint8Array
-      const bytes = new TextEncoder().encode(data);
-      return new File([bytes], file.name, { type: "video/mp4" });
-    } else {
-      // Normal case: Uint8Array
-      const bytes = new Uint8Array(data); // ensure standard Uint8Array
-      return new File([bytes], file.name, { type: "video/mp4" });
+      const data = await res.json();
+      console.log("Upload API response:", data);
+
+      if (!res.ok || !data.secure_urls || data.secure_urls.length === 0) {
+        throw new Error(data.error || "Upload failed");
+      }
+
+      setFiles((prev) =>
+        prev.map((f, i) =>
+          i === index
+            ? {
+                ...f,
+                status: "success",
+                progress: 100,
+                secureUrl: data.secure_urls[0],
+              }
+            : f
+        )
+      );
+    } catch (err: any) {
+      console.error("File upload error:", err);
+      setFiles((prev) =>
+        prev.map((f, i) =>
+          i === index ? { ...f, status: "error", progress: 0 } : f
+        )
+      );
     }
   };
 
   // -----------------------------
-  // UPLOAD FILE WITH PROGRESS
+  // UPLOAD ALL FILES
   // -----------------------------
-  const uploadFileWithProgress = (
-    file: File,
-    index: number,
-    totalFiles: number
-  ): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const fileRef = ref(
-        storage,
-        `host-spaces/${user?.uid}/${Date.now()}-${file.name}`
-      );
-
-      const uploadTask = uploadBytesResumable(fileRef, file);
-
-      uploadTask.on(
-        "state_changed",
-        (snapshot) => {
-          const percent =
-            (snapshot.bytesTransferred / snapshot.totalBytes / totalFiles) *
-            100;
-          setProgress((prev) => Math.min(prev + percent, 100));
-        },
-        reject,
-        async () => {
-          const url = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve(url);
-        }
-      );
-    });
-  };
-
-  // -----------------------------
-  // HANDLE ALL FILES
-  // -----------------------------
-  const processFiles = async (): Promise<string[]> => {
-    if (!files || files.length === 0) return [];
-
-    const totalFiles = files.length;
-
-    const preparedFiles: File[] = await Promise.all(
-      Array.from(files).map(async (file) =>
-        file.type.startsWith("video/") ? compressVideo(file) : file
-      )
+  const uploadAllFiles = async () => {
+    const pendingFiles = files.map((f, i) =>
+      f.status === "pending" || f.status === "error"
+        ? uploadFile(f, i)
+        : Promise.resolve()
     );
 
-    const uploadedUrls: string[] = await Promise.all(
-      preparedFiles.map((file, idx) =>
-        uploadFileWithProgress(file, idx, totalFiles)
-      )
-    );
-
-    return uploadedUrls;
+    await Promise.all(pendingFiles);
   };
 
   // -----------------------------
   // SUBMIT HANDLER
   // -----------------------------
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
     if (!user) return alert("You must be logged in.");
-    if (!files || files.length === 0) return alert("Upload at least one file.");
+    if (files.length === 0) return alert("Upload at least one file.");
 
     setLoading(true);
-    setProgress(0);
-
     try {
-      const uploadedUrls = await processFiles();
+      await uploadAllFiles();
 
-      const listing: HostListing = {
+      const uploadedUrls = files
+        .filter((f) => f.status === "success" && f.secureUrl)
+        .map((f) => f.secureUrl!) as string[];
+
+      if (uploadedUrls.length === 0)
+        return alert("No files uploaded successfully.");
+
+      console.log("Final uploaded URLs:", uploadedUrls);
+
+      await addDoc(collection(db, "hostSpaces"), {
         ...formData,
         media: uploadedUrls,
         hostId: user.uid,
-        id: "", // Firestore will generate this
-      };
-
-      await addDoc(collection(db, "hostSpaces"), {
-        ...listing,
         createdAt: serverTimestamp(),
       });
 
-      alert("Your listing has been uploaded successfully!");
+      alert("Listing uploaded successfully!");
       setFormData({
         name: "",
         spaceType: "",
@@ -183,30 +236,27 @@ export default function UploadListing() {
         message: "",
         media: [],
       });
-      setFiles(null);
-      setProgress(0);
+      files.forEach((f) => URL.revokeObjectURL(f.preview));
+      setFiles([]);
       router.push("/host/dashboard");
-    } catch (error) {
-      console.error(error);
-      alert("Failed to upload listing. Please try again.");
+    } catch (err) {
+      console.error("Submit error:", err);
+      alert("Upload failed. Please check the console for details.");
     } finally {
       setLoading(false);
     }
   };
 
-  // -----------------------------
-  // UI
-  // -----------------------------
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white text-gray-900 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-2xl"
+        className="bg-white p-8 rounded-xl shadow-lg w-full max-w-2xl"
       >
         <h2 className="text-3xl font-bold mb-6 text-center">
-          Upload Your Space
+          Upload your space
         </h2>
 
         {!user ? (
@@ -214,104 +264,131 @@ export default function UploadListing() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-800 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Email</label>
-                <input
-                  type="email"
-                  value={user.email || ""}
-                  disabled
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100 text-gray-500 cursor-not-allowed"
-                />
-              </div>
+              <input
+                type="text"
+                name="name"
+                required
+                placeholder="Full Name"
+                value={formData.name}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border rounded-xl"
+              />
+              <input
+                type="email"
+                value={user.email || ""}
+                disabled
+                className="w-full px-4 py-3 border rounded-xl bg-gray-100"
+              />
             </div>
 
             <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Type of Space
-                </label>
-                <input
-                  type="text"
-                  name="spaceType"
-                  value={formData.spaceType}
-                  onChange={handleChange}
-                  required
-                  placeholder="Apartment, Hall, Studio..."
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-800 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Location
-                </label>
-                <input
-                  type="text"
-                  name="location"
-                  value={formData.location}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-800 outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Description
-              </label>
-              <textarea
-                name="message"
-                rows={4}
-                value={formData.message}
+              <input
+                type="text"
+                name="spaceType"
+                required
+                placeholder="Type of Space"
+                value={formData.spaceType}
                 onChange={handleChange}
-                placeholder="Tell us more about your space..."
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-800 outline-none"
+                className="w-full px-4 py-3 border rounded-xl"
+              />
+              <input
+                type="text"
+                name="location"
+                required
+                placeholder="Location"
+                value={formData.location}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border rounded-xl"
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Upload Photos or Videos
-              </label>
+            <textarea
+              name="message"
+              rows={4}
+              placeholder="About your space..."
+              value={formData.message}
+              onChange={handleChange}
+              className="w-full px-4 py-3 border rounded-xl"
+            />
+
+            {/* Drag & Drop Area */}
+            <div
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              className="w-full p-6 border-2 border-dashed border-gray-300 rounded-xl text-center cursor-pointer"
+            >
               <input
                 type="file"
-                accept="image/*, video/*"
+                accept="image/*,video/*"
                 multiple
-                onChange={handleFileChange}
+                onChange={handleFileInputChange}
+                className="hidden"
+                id="fileInput"
               />
+              <label htmlFor="fileInput" className="cursor-pointer">
+                Drag & drop files here or click to select (max {MAX_FILES}{" "}
+                files)
+              </label>
             </div>
 
-            {loading && (
-              <div className="w-full bg-gray-200 rounded-full h-4 mt-2">
-                <div
-                  className="bg-gray-900 h-4 rounded-full transition-all"
-                  style={{ width: `${progress}%` }}
-                />
+            {/* Preview List */}
+            {files.length > 0 && (
+              <div className="grid grid-cols-3 gap-4 mt-4">
+                {files.map((f, idx) => (
+                  <div key={idx} className="relative">
+                    {f.file.type.startsWith("image/") ? (
+                      <img
+                        src={f.preview}
+                        alt={f.file.name}
+                        className="w-full h-24 object-cover rounded"
+                      />
+                    ) : (
+                      <video
+                        src={f.preview}
+                        className="w-full h-24 object-cover rounded"
+                      />
+                    )}
+
+                    {/* Remove / Retry Buttons */}
+                    <div className="absolute top-1 right-1 flex space-x-1">
+                      <button
+                        type="button"
+                        onClick={() => removeFile(idx)}
+                        className="bg-red-500 text-white rounded-full w-6 h-6 text-xs flex items-center justify-center"
+                      >
+                        ×
+                      </button>
+                      {f.status === "error" && (
+                        <button
+                          type="button"
+                          onClick={() => uploadFile(f, idx)}
+                          className="bg-yellow-500 text-white rounded-full w-6 h-6 text-xs flex items-center justify-center"
+                        >
+                          ↻
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Progress bar */}
+                    {f.status === "uploading" || f.progress > 0 ? (
+                      <div className="w-full bg-gray-200 h-2 rounded mt-1">
+                        <div
+                          className="bg-black h-2 rounded"
+                          style={{ width: `${f.progress}%` }}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
               </div>
             )}
 
             <motion.button
               whileHover={{ scale: 1.03 }}
-              type="submit"
               disabled={loading}
-              className="w-full py-3 bg-gray-900 text-white rounded-xl shadow-md hover:bg-gray-800 transition"
+              className="w-full py-3 bg-black text-white rounded-xl mt-4"
             >
-              {loading
-                ? `Uploading ${Math.round(progress)}%`
-                : "Submit Listing"}
+              {loading ? "Uploading..." : "Submit Listing"}
             </motion.button>
           </form>
         )}

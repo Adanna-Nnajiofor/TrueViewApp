@@ -111,17 +111,23 @@ export default function HostDashboard() {
   };
 
   const uploadFiles = async () => {
-    if (!formData.files || formData.files.length === 0) return [];
+    if (!formData.files) return [];
+
     const urls: string[] = [];
     for (const file of Array.from(formData.files)) {
-      const fileRef = ref(
-        storage,
-        `host-spaces/${user?.uid}/${Date.now()}-${file.name}`
-      );
-      await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
-      urls.push(url);
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+
+      const data = await res.json();
+      urls.push(data.secure_url);
     }
+
     return urls;
   };
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { auth, db, storage } from "../../../firebaseConfig";
+import { auth, db } from "../../../firebaseConfig";
 import {
   collection,
   query,
@@ -12,7 +12,6 @@ import {
   deleteDoc,
   doc,
 } from "firebase/firestore";
-import { ref, deleteObject } from "firebase/storage";
 
 export default function HostListingsPage() {
   const router = useRouter();
@@ -69,15 +68,8 @@ export default function HostListingsPage() {
     if (!confirmDelete) return;
 
     try {
-      // Delete media files from Firebase Storage
-      for (const mediaUrl of listing.media || []) {
-        const fileRef = ref(storage, mediaUrl);
-        await deleteObject(fileRef);
-      }
-
-      // Delete Firestore document
+      // Only delete Firestore document, media is on Cloudinary
       await deleteDoc(doc(db, "hostSpaces", listing.id));
-
       alert("Listing deleted successfully!");
     } catch (err) {
       console.error(err);
@@ -113,11 +105,13 @@ export default function HostListingsPage() {
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-white shadow rounded-xl overflow-hidden"
               >
-                <img
-                  src={item.media?.[0]}
-                  className="w-full h-40 object-cover"
-                  alt=""
-                />
+                {item.media?.[0] && (
+                  <img
+                    src={item.media[0]}
+                    className="w-full h-40 object-cover"
+                    alt=""
+                  />
+                )}
 
                 <div className="p-4">
                   <h3 className="font-semibold text-lg">{item.spaceType}</h3>

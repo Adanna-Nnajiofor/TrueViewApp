@@ -29,6 +29,7 @@ import {
 interface AuthContextType {
   user: User | null;
   userData: DocumentData | null;
+  setUserData: React.Dispatch<React.SetStateAction<DocumentData | null>>;
   loading: boolean;
   logout: () => Promise<void>;
   refreshUserData: (uid?: string) => Promise<DocumentData | null>;
@@ -52,20 +53,13 @@ interface AuthContextType {
   saveUserToFirestore: (user: User, role: "user" | "host") => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  userData: null,
-  loading: true,
-  logout: async () => {},
-  refreshUserData: async () => null,
-  signupWithEmail: async () => ({} as User),
-  loginWithEmail: async () => null,
-  loginWithOAuth: async () => null,
-  signupWithOAuth: async () => ({} as User),
-  saveUserToFirestore: async () => {},
-});
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error("useAuth must be used within AuthProvider");
+  return context;
+};
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -88,7 +82,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => unsubscribe();
   }, []);
 
-  // Refresh user Firestore data
   const refreshUserData = async (
     uid?: string
   ): Promise<DocumentData | null> => {
@@ -100,7 +93,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const snapshot = await getDoc(userRef);
       const data = snapshot.exists() ? snapshot.data() : null;
 
-      setUserData(data);
+      setUserData(data); // Update state
       return data;
     } catch (error) {
       console.error("Error refreshing user data:", error);
@@ -199,7 +192,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const snapshot = await getDoc(userRef);
 
     if (!snapshot.exists()) {
-      // First time OAuth → default role "user"
       await setDoc(userRef, {
         uid: oauthUser.uid,
         email: oauthUser.email || "",
@@ -239,6 +231,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       value={{
         user,
         userData,
+        setUserData, // <-- exposed here
         loading,
         logout,
         refreshUserData,

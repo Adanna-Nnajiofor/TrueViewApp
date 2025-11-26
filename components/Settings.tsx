@@ -5,17 +5,20 @@ import { useAuth } from "@/context/AuthProvider";
 import Image from "next/image";
 import { updateProfile } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
-import { db } from "@/firebaseConfig";
 import { motion } from "framer-motion";
 import { FaCamera, FaSave } from "react-icons/fa";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
+import { db } from "@/firebaseConfig";
 
 export default function SettingsPage() {
-  const { user, userData } = useAuth();
+  const { user, userData, setUserData } = useAuth();
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
   const [photoURL, setPhotoURL] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const router = useRouter();
 
   useEffect(() => {
     if (userData) {
@@ -25,37 +28,65 @@ export default function SettingsPage() {
     }
   }, [userData, user]);
 
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    const toastId = toast.loading("Uploading photo...");
+
+    try {
+      const toBase64 = (file: File) =>
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (error) => reject(error);
+        });
+
+      const base64Data = await toBase64(file);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: base64Data, folder: "users" }),
+      });
+
+      const data = await response.json();
+      if (!data.url) throw new Error("Upload failed");
+
+      await updateDoc(doc(db, "users", user.uid), { photoURL: data.url });
+      await updateProfile(user, { photoURL: data.url });
+
+      setPhotoURL(data.url);
+      setUserData({ ...userData, photoURL: data.url }); // Update context
+      toast.success("Profile photo updated!", { id: toastId });
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to upload photo.", { id: toastId });
+    }
+  };
+
   const handleSave = async () => {
     if (!user) return;
     setSaving(true);
     setMessage("");
 
     try {
-      // 1️⃣ Update Firebase Auth profile
-      await updateProfile(user, {
+      await updateProfile(user, { displayName, photoURL });
+      await updateDoc(doc(db, "users", user.uid), {
         displayName,
+        bio,
         photoURL,
       });
-
-      // 2️⃣ Update Firestore user document
-      const userRef = doc(db, "users", user.uid);
-      await updateDoc(userRef, { displayName, bio, photoURL });
+      setUserData({ ...userData, displayName, bio, photoURL }); // Update context
 
       setMessage("✅ Profile updated successfully!");
+      setTimeout(() => router.push("/host/dashboard"), 1500);
     } catch (error) {
-      console.error("Error updating profile:", error);
+      console.error(error);
       setMessage("❌ Failed to update profile. Try again.");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const imageUrl = URL.createObjectURL(file);
-      setPhotoURL(imageUrl);
-      // 🔵 For production, upload to Firebase Storage and get URL instead of using local object URL
     }
   };
 
@@ -100,7 +131,6 @@ export default function SettingsPage() {
               className="hidden"
             />
           </div>
-
           <p className="text-gray-600 text-sm">
             Click camera icon to change photo
           </p>
@@ -149,8 +179,7 @@ export default function SettingsPage() {
           disabled={saving}
           className="mt-6 w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-60"
         >
-          <FaSave />
-          {saving ? "Saving..." : "Save Changes"}
+          <FaSave /> {saving ? "Saving..." : "Save Changes"}
         </button>
       </motion.div>
     </section>

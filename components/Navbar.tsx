@@ -20,51 +20,70 @@ interface NavLink {
 }
 
 const links: NavLink[] = [
-  { href: "#home", label: "Home" },
-  { href: "#about", label: "About" },
-  { href: "#services", label: "Services" },
-  { href: "#listings", label: "Listings" },
-  { href: "#portfolio", label: "Portfolio" },
-  { href: "#contact", label: "Contact" },
+  { href: "/", label: "Home" },
+  { href: "/about", label: "About" },
+  { href: "/services", label: "Services" },
+  { href: "/listings", label: "Listings" },
+  { href: "/portfolio", label: "Portfolio" },
+  { href: "/contact", label: "Contact" },
 ];
 
 export default function Navbar() {
   const { user, userData, logout } = useAuth();
   const router = useRouter();
+
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [activeHref, setActiveHref] = useState("#home");
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
-  const navRef = useRef<HTMLDivElement>(null);
 
-  // 🔵 Section Scroll Tracking
+  const navRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  // Track scroll and update nav indicator
   const updateIndicator = () => {
+    if (isOpen || dropdownOpen) return;
     if (typeof window === "undefined") return;
 
     const scrollPos = window.scrollY + window.innerHeight / 3;
-    for (const link of links) {
-      const section = document.querySelector(link.href) as HTMLElement | null;
-      if (section) {
-        if (
-          section.offsetTop <= scrollPos &&
-          scrollPos < section.offsetTop + section.clientHeight
-        ) {
-          setActiveHref(link.href);
 
-          const navEl = navRef.current?.querySelector(
-            `a[href="${link.href}"]`
-          ) as HTMLElement | null;
-          if (navEl && navRef.current) {
-            const rect = navEl.getBoundingClientRect();
-            const parentRect = navRef.current.getBoundingClientRect();
-            setIndicatorStyle({
-              left: rect.left - parentRect.left,
-              width: rect.width,
-            });
-          }
+    for (const link of links) {
+      if (!link.href.startsWith("#")) continue;
+      const section = document.querySelector(link.href) as HTMLElement | null;
+      if (
+        section &&
+        section.offsetTop <= scrollPos &&
+        scrollPos < section.offsetTop + section.clientHeight
+      ) {
+        setActiveHref(link.href);
+        const navEl = navRef.current?.querySelector(
+          `a[href="${link.href}"]`
+        ) as HTMLElement | null;
+        if (navEl && navRef.current) {
+          const rect = navEl.getBoundingClientRect();
+          const parentRect = navRef.current.getBoundingClientRect();
+          setIndicatorStyle({
+            left: rect.left - parentRect.left,
+            width: rect.width,
+          });
         }
+      }
+    }
+
+    const currentPath = window.location.pathname;
+    if (!currentPath.includes("#")) {
+      setActiveHref(currentPath);
+      const navEl = navRef.current?.querySelector(
+        `a[href="${currentPath}"]`
+      ) as HTMLElement | null;
+      if (navEl && navRef.current) {
+        const rect = navEl.getBoundingClientRect();
+        const parentRect = navRef.current.getBoundingClientRect();
+        setIndicatorStyle({
+          left: rect.left - parentRect.left,
+          width: rect.width,
+        });
       }
     }
   };
@@ -81,7 +100,7 @@ export default function Navbar() {
       window.removeEventListener("scroll", handleScroll);
       window.removeEventListener("resize", updateIndicator);
     };
-  }, []);
+  }, [isOpen, dropdownOpen]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -97,27 +116,24 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleClick = (
-    e: React.MouseEvent<HTMLAnchorElement>,
-    href: string
-  ) => {
-    e.preventDefault();
-    const section = document.querySelector(href) as HTMLElement | null;
-    if (section) {
-      section.scrollIntoView({ behavior: "smooth" });
-      setIsOpen(false);
+  const handleNavigateOrScroll = (href: string) => {
+    setIsOpen(false);
+    if (href.startsWith("#")) {
+      const section = document.querySelector(href) as HTMLElement | null;
+      if (section) {
+        section.scrollIntoView({ behavior: "smooth" });
+        return;
+      }
     }
-  };
-
-  const handleNavigate = (path: string) => {
-    setDropdownOpen(false);
-    router.push(path);
+    router.push(href);
+    setActiveHref(href);
   };
 
   const handleLogout = async () => {
     setDropdownOpen(false);
     await logout();
     router.push("/login");
+    setActiveHref("/login");
   };
 
   return (
@@ -141,7 +157,10 @@ export default function Navbar() {
             <a
               key={link.href}
               href={link.href}
-              onClick={(e) => handleClick(e, link.href)}
+              onClick={(e) => {
+                e.preventDefault();
+                handleNavigateOrScroll(link.href);
+              }}
               className={`relative py-1 transition-colors hover:text-blue-600 ${
                 activeHref === link.href ? "text-blue-600" : "text-gray-700"
               }`}
@@ -149,6 +168,20 @@ export default function Navbar() {
               {link.label}
             </a>
           ))}
+          {!user && (
+            <a
+              href="/login"
+              onClick={(e) => {
+                e.preventDefault();
+                handleNavigateOrScroll("/login");
+              }}
+              className={`relative py-1 transition-colors border-gray-400 border-2 rounded-xl p-4 hover:text-blue-600 ${
+                activeHref === "/login" ? "text-blue-600" : "text-gray-700"
+              }`}
+            >
+              Login
+            </a>
+          )}
           <span
             className="absolute bottom-0 h-[2px] bg-blue-600 transition-all duration-300"
             style={{ left: indicatorStyle.left, width: indicatorStyle.width }}
@@ -156,25 +189,26 @@ export default function Navbar() {
         </div>
 
         {/* User Dropdown */}
-        {user ? (
+        {user && (
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
               className="flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-full hover:bg-blue-100 transition"
             >
+              {/* Reactive profile picture */}
               {userData?.photoURL ? (
                 <Image
                   src={userData.photoURL}
                   alt="User Avatar"
                   width={36}
                   height={36}
-                  className="rounded-full border border-blue-600"
+                  className="rounded-full border object-cover border-blue-600"
                 />
               ) : (
                 <FaUserCircle className="text-blue-600 text-2xl" />
               )}
               <span className="text-sm font-medium text-gray-800">
-                {userData?.displayName || user?.displayName || "User"}
+                {userData?.displayName || user.displayName || "User"}
               </span>
             </button>
 
@@ -194,63 +228,50 @@ export default function Navbar() {
                         alt="User Avatar"
                         width={60}
                         height={60}
-                        className="mx-auto rounded-full border-2 border-blue-600"
+                        className="mx-auto object-cover rounded-full border-2 border-blue-600"
                       />
                     ) : (
                       <FaUserCircle className="mx-auto text-gray-300 text-5xl" />
                     )}
                     <h3 className="mt-2 font-semibold text-gray-800">
-                      {userData?.displayName || user?.displayName || "User"}
+                      {userData?.displayName || user.displayName || "User"}
                     </h3>
                     <p className="text-sm text-gray-500 truncate">
-                      {userData?.email || user?.email}
+                      {userData?.email || user.email}
                     </p>
                   </div>
 
                   <div className="py-2">
                     <button
-                      onClick={() => handleNavigate("/profile")}
+                      onClick={() => handleNavigateOrScroll("/profile")}
                       className="w-full flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 gap-2 transition"
                     >
-                      <FaUser className="text-blue-600" />
-                      View Profile
+                      <FaUser className="text-blue-600" /> View Profile
                     </button>
                     <button
-                      onClick={() => handleNavigate("/listings")}
+                      onClick={() => handleNavigateOrScroll("/listings")}
                       className="w-full flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 gap-2 transition"
                     >
-                      <FaList className="text-blue-600" />
-                      My Listings
+                      <FaList className="text-blue-600" /> My Listings
                     </button>
                     <button
-                      onClick={() => handleNavigate("/settings")}
+                      onClick={() => handleNavigateOrScroll("/settings")}
                       className="w-full flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 gap-2 transition"
                     >
-                      <FaCog className="text-blue-600" />
-                      Settings
+                      <FaCog className="text-blue-600" /> Settings
                     </button>
-
                     <hr className="my-2 border-gray-200" />
-
                     <button
                       onClick={handleLogout}
                       className="w-full flex items-center px-4 py-2 text-red-600 hover:bg-red-50 gap-2 transition"
                     >
-                      <FaSignOutAlt />
-                      Logout
+                      <FaSignOutAlt /> Logout
                     </button>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
-        ) : (
-          <Link
-            href="/login"
-            className="hidden md:inline-block bg-blue-600 text-white px-5 py-2 rounded-full hover:bg-blue-700 transition"
-          >
-            Login
-          </Link>
         )}
 
         {/* Mobile Hamburger */}
@@ -278,27 +299,33 @@ export default function Navbar() {
 
       {/* Mobile Menu */}
       <div
-        className={`md:hidden bg-white shadow-md flex flex-col px-4 py-4 space-y-2 transition-all duration-500 overflow-hidden ${
+        className={`md:hidden relative bg-white shadow-md flex flex-col px-4 py-4 space-y-2 transition-all duration-500 overflow-hidden ${
           isOpen ? "max-h-screen opacity-100" : "max-h-0 opacity-0"
         }`}
       >
         {links.map((link) => (
-          <a
+          <button
             key={link.href}
-            href={link.href}
-            onClick={(e) => handleClick(e, link.href)}
+            onClick={() => handleNavigateOrScroll(link.href)}
             className={`py-2 text-gray-700 hover:text-blue-600 transition relative font-medium ${
               activeHref === link.href ? "text-blue-600 font-semibold" : ""
             }`}
           >
             {link.label}
-          </a>
+          </button>
         ))}
-
-        {user ? (
+        {!user && (
+          <button
+            onClick={() => handleNavigateOrScroll("/login")}
+            className="py-2 bg-blue-600 text-white text-center rounded-md hover:bg-blue-700 transition"
+          >
+            Login
+          </button>
+        )}
+        {user && (
           <>
             <button
-              onClick={() => handleNavigate("/profile")}
+              onClick={() => handleNavigateOrScroll("/profile")}
               className="py-2 text-gray-700 hover:text-blue-600 transition"
             >
               Profile
@@ -310,14 +337,6 @@ export default function Navbar() {
               Logout
             </button>
           </>
-        ) : (
-          <Link
-            href="/login"
-            onClick={() => setIsOpen(false)}
-            className="py-2 bg-blue-600 text-white text-center rounded-md hover:bg-blue-700 transition"
-          >
-            Login
-          </Link>
         )}
       </div>
     </nav>
