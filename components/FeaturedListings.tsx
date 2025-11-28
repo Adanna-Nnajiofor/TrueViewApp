@@ -18,7 +18,7 @@ interface Props {
 const FeaturedListings = ({ featured = [] }: Props) => {
   const [current, setCurrent] = useState(0);
 
-  // 🧠 Guard against empty or undefined featured list
+  //  Guard against empty or undefined featured list
   const hasFeatured = featured && featured.length > 0;
 
   // Auto-slide every 6 seconds

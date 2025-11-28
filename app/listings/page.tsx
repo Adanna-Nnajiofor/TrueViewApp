@@ -1,7 +1,7 @@
 import ListingsPage from "@/components/Listings";
 import React from "react";
 
-const Listings = () => {
+const listings = () => {
   return (
     <div>
       <ListingsPage />
@@ -9,4 +9,4 @@ const Listings = () => {
   );
 };
 
-export default Listings;
+export default listings;
