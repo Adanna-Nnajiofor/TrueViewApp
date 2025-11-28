@@ -442,7 +442,7 @@ export default function HomePage() {
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, margin: "-120px" }}
-          className="py-20 text-white relative overflow-hidden rounded-2xl"
+          className="py-20 text-white relative overflow-hidden "
           style={{
             background: "linear-gradient(270deg, #6366F1, #8B5CF6, #EC4899)",
             backgroundSize: "600% 600%",
