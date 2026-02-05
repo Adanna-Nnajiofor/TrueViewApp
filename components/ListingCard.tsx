@@ -2,23 +2,50 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Listing } from "@/lib/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaMapMarkerAlt, FaVideo, FaTag, FaLock, FaStar } from "react-icons/fa";
-import { useAuthState } from "react-firebase-hooks/auth";
-import { auth } from "@/firebaseConfig";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "@/firebaseConfig";
+import { useAuth } from "../context/AuthProvider";
 
 interface Props {
-  listing: Listing;
+  listing: any;
+  onToggleFeatured?: (id: string, newStatus: boolean) => void;
 }
 
-const ListingCard = ({ listing }: Props) => {
-  const [user] = useAuthState(auth);
-  const [showModal, setShowModal] = useState(false);
+const ListingCard = ({ listing, onToggleFeatured }: Props) => {
+  const { user, userData } = useAuth();
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showTourModal, setShowTourModal] = useState(false);
+  const [isFeatured, setIsFeatured] = useState(listing.featured);
 
   const handleGuestClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    setShowModal(true);
+    setShowLoginModal(true);
+  };
+
+  const handleViewTour = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+    setShowTourModal(true);
+  };
+
+  const toggleFeatured = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (userData?.role !== "admin") return;
+
+    try {
+      const docRef = doc(db, "hostSpaces", listing.id);
+      await updateDoc(docRef, { featured: !isFeatured });
+
+      setIsFeatured(!isFeatured);
+      onToggleFeatured?.(listing.id, !isFeatured);
+    } catch (error) {
+      console.error("Error updating featured:", error);
+    }
   };
 
   return (
@@ -33,7 +60,7 @@ const ListingCard = ({ listing }: Props) => {
           href={user ? `/listings/${listing.slug}` : "#"}
           onClick={!user ? handleGuestClick : undefined}
         >
-          {/* Thumbnail Section */}
+          {/* Thumbnail */}
           <div className="relative h-56 sm:h-64 md:h-52 lg:h-56 overflow-hidden">
             <img
               src={listing.thumbnail}
@@ -49,27 +76,29 @@ const ListingCard = ({ listing }: Props) => {
               {listing.category}
             </span>
 
-            {/* ⭐ Featured Tag */}
-            {listing.featured && (
+            {/* Featured Tag */}
+            {isFeatured && (
               <span className="absolute top-3 right-3 bg-gradient-to-r from-yellow-500 to-orange-400 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-md flex items-center gap-1">
                 <FaStar className="text-white" />
                 Featured
               </span>
             )}
 
-            {/* Overlay Action */}
+            {/* Overlay */}
             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-500 flex items-center justify-center">
-              {user ? (
-                <div className="flex items-center gap-2 bg-white/90 backdrop-blur-md text-indigo-600 text-sm px-4 py-2 rounded-full shadow-md font-medium hover:bg-indigo-50">
-                  <FaVideo className="text-indigo-500" />
-                  <span>View Tour</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 bg-white/90 backdrop-blur-md text-red-600 text-sm px-4 py-2 rounded-full shadow-md font-medium hover:bg-red-50">
-                  <FaLock className="text-red-500" />
-                  <span>Login to Unlock</span>
-                </div>
-              )}
+              <div
+                onClick={handleViewTour}
+                className={`flex items-center gap-2 ${
+                  user
+                    ? "bg-white/90 text-indigo-600 hover:bg-indigo-50"
+                    : "bg-white/90 text-red-600 hover:bg-red-50"
+                } backdrop-blur-md text-sm px-4 py-2 rounded-full shadow-md font-medium cursor-pointer`}
+              >
+                <FaVideo
+                  className={user ? "text-indigo-500" : "text-red-500"}
+                />
+                <span>{user ? "View Tour" : "Login to Unlock"}</span>
+              </div>
             </div>
           </div>
 
@@ -88,11 +117,29 @@ const ListingCard = ({ listing }: Props) => {
               {listing.price}
             </p>
 
-            <div className="mt-3">
+            <div className="mt-3 flex flex-col gap-2">
               {user ? (
-                <button className="text-indigo-600 text-sm font-medium hover:underline flex items-center gap-1">
-                  Learn More →
-                </button>
+                <>
+                  <button
+                    onClick={handleViewTour}
+                    className="text-indigo-600 text-sm font-medium hover:underline flex items-center gap-1"
+                  >
+                    Learn More →
+                  </button>
+
+                  {userData?.role === "admin" && (
+                    <button
+                      onClick={toggleFeatured}
+                      className={`mt-2 px-3 py-1 text-sm rounded ${
+                        isFeatured
+                          ? "bg-yellow-400 text-white"
+                          : "bg-gray-200 text-gray-800"
+                      }`}
+                    >
+                      {isFeatured ? "Unfeature" : "Feature"}
+                    </button>
+                  )}
+                </>
               ) : (
                 <button
                   onClick={handleGuestClick}
@@ -106,9 +153,9 @@ const ListingCard = ({ listing }: Props) => {
         </Link>
       </motion.div>
 
-      {/* MODAL */}
+      {/* LOGIN MODAL */}
       <AnimatePresence>
-        {showModal && (
+        {showLoginModal && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -146,10 +193,45 @@ const ListingCard = ({ listing }: Props) => {
               </div>
 
               <button
-                onClick={() => setShowModal(false)}
+                onClick={() => setShowLoginModal(false)}
                 className="mt-6 text-sm text-gray-500 hover:text-gray-700"
               >
                 Maybe Later
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* TOUR MODAL */}
+      <AnimatePresence>
+        {showTourModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 200, damping: 18 }}
+              className="bg-white rounded-2xl shadow-2xl p-4 max-w-4xl w-full mx-4 text-center"
+            >
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">
+                {listing.title} - Tour
+              </h3>
+              <iframe
+                src={listing.tourUrl} // <-- add 3D tour or video URL in your listing object
+                title={listing.title}
+                className="w-full h-[500px] rounded-lg"
+              ></iframe>
+              <button
+                onClick={() => setShowTourModal(false)}
+                className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+              >
+                Close
               </button>
             </motion.div>
           </motion.div>

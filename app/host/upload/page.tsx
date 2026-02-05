@@ -282,15 +282,22 @@ export default function UploadListing() {
             </div>
 
             <div className="grid md:grid-cols-2 gap-6">
-              <input
-                type="text"
+              <select
                 name="spaceType"
                 required
-                placeholder="Type of Space"
                 value={formData.spaceType}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border rounded-xl"
-              />
+                className="w-full px-4 py-3 border rounded-xl bg-white"
+              >
+                <option value="" disabled>
+                  Select Space Type
+                </option>
+                <option value="Real Estate">Real Estate</option>
+                <option value="Tourism">Tourism</option>
+                <option value="Shortlet">Shortlet</option>
+                <option value="Commercial">Commercial</option>
+              </select>
+
               <input
                 type="text"
                 name="location"

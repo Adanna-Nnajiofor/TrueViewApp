@@ -23,6 +23,10 @@ import {
   getDoc,
   setDoc,
   serverTimestamp,
+  collection,
+  query,
+  where,
+  getDocs,
   DocumentData,
 } from "firebase/firestore";
 
@@ -66,6 +70,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [userData, setUserData] = useState<DocumentData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // -----------------------------
+  // AUTH STATE LISTENER
+  // -----------------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
@@ -82,6 +89,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => unsubscribe();
   }, []);
 
+  // -----------------------------
+  // REFRESH USER DATA + HOST LISTINGS
+  // -----------------------------
   const refreshUserData = async (
     uid?: string
   ): Promise<DocumentData | null> => {
@@ -93,6 +103,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const snapshot = await getDoc(userRef);
       const data = snapshot.exists() ? snapshot.data() : null;
 
+      // If host, fetch their listings
+      if (data?.role === "host") {
+        const listingsQuery = query(
+          collection(db, "hostSpaces"),
+          where("hostId", "==", userId)
+        );
+        const listingsSnapshot = await getDocs(listingsQuery);
+        const hostListings = listingsSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        data.hostListings = hostListings;
+      }
+
       setUserData(data); // Update state
       return data;
     } catch (error) {
@@ -101,6 +125,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // -----------------------------
+  // LOGOUT
+  // -----------------------------
   const logout = async () => {
     try {
       await signOut(auth);
@@ -111,6 +138,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // -----------------------------
+  // SAVE USER TO FIRESTORE
+  // -----------------------------
   const saveUserToFirestore = async (user: User, role: "user" | "host") => {
     try {
       const userRef = doc(db, "users", user.uid);
@@ -131,7 +161,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // -----------------------------
   // EMAIL SIGNUP
+  // -----------------------------
   const signupWithEmail = async (
     email: string,
     password: string,
@@ -143,7 +175,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       email,
       password
     );
-
     const newUser = userCredential.user;
 
     await setDoc(doc(db, "users", newUser.uid), {
@@ -160,7 +191,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return newUser;
   };
 
+  // -----------------------------
   // EMAIL LOGIN
+  // -----------------------------
   const loginWithEmail = async (
     email: string,
     password: string
@@ -170,14 +203,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       email,
       password
     );
-
     const loggedInUser = userCredential.user;
 
     setUser(loggedInUser);
     return await refreshUserData(loggedInUser.uid);
   };
 
-  // OAUTH LOGIN (AUTO ROLE DETECTION)
+  // -----------------------------
+  // OAUTH LOGIN (auto role detection)
+  // -----------------------------
   const loginWithOAuth = async (
     provider: "google" | "facebook"
   ): Promise<DocumentData | null> => {
@@ -197,7 +231,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         email: oauthUser.email || "",
         displayName: oauthUser.displayName || "",
         photoURL: oauthUser.photoURL || "",
-        role: "user",
+        role: "user", // default role
         createdAt: serverTimestamp(),
       });
     }
@@ -206,7 +240,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return await refreshUserData(oauthUser.uid);
   };
 
+  // -----------------------------
   // OAUTH SIGNUP (role chosen)
+  // -----------------------------
   const signupWithOAuth = async (
     provider: "google" | "facebook",
     role: "user" | "host"
@@ -217,7 +253,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         : await signInWithPopup(auth, facebookProvider as FacebookAuthProvider);
 
     const oauthUser = result.user;
-
     await saveUserToFirestore(oauthUser, role);
 
     setUser(oauthUser);
@@ -231,7 +266,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       value={{
         user,
         userData,
-        setUserData, // <-- exposed here
+        setUserData,
         loading,
         logout,
         refreshUserData,

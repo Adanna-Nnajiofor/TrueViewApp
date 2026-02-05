@@ -168,6 +168,7 @@ export default function Navbar() {
               {link.label}
             </a>
           ))}
+
           {!user && (
             <a
               href="/login"
@@ -182,6 +183,7 @@ export default function Navbar() {
               Login
             </a>
           )}
+
           <span
             className="absolute bottom-0 h-[2px] bg-blue-600 transition-all duration-300"
             style={{ left: indicatorStyle.left, width: indicatorStyle.width }}
@@ -195,7 +197,6 @@ export default function Navbar() {
               onClick={() => setDropdownOpen(!dropdownOpen)}
               className="flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-full hover:bg-blue-100 transition"
             >
-              {/* Reactive profile picture */}
               {userData?.photoURL ? (
                 <Image
                   src={userData.photoURL}
@@ -219,8 +220,9 @@ export default function Navbar() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.2 }}
-                  className="absolute right-0 mt-3 w-56 bg-white border border-gray-100 rounded-xl shadow-xl py-3 z-50"
+                  className="absolute right-0 mt-3 w-72 bg-white border border-gray-100 rounded-xl shadow-xl py-3 z-50 overflow-hidden"
                 >
+                  {/* Profile info */}
                   <div className="px-4 pb-3 border-b border-gray-100 text-center">
                     {userData?.photoURL ? (
                       <Image
@@ -241,33 +243,45 @@ export default function Navbar() {
                     </p>
                   </div>
 
-                  <div className="py-2">
+                  {/* Host / My Listings Button */}
+                  {user && (
                     <button
-                      onClick={() => handleNavigateOrScroll("/profile")}
-                      className="w-full flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 gap-2 transition"
-                    >
-                      <FaUser className="text-blue-600" /> View Profile
-                    </button>
-                    <button
-                      onClick={() => handleNavigateOrScroll("/listings")}
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        setIsOpen(false);
+                        // Navigate depending on role
+                        if (userData?.role === "host") {
+                          router.push("/host/listings");
+                        } else {
+                          router.push("/listings");
+                        }
+                      }}
                       className="w-full flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 gap-2 transition"
                     >
                       <FaList className="text-blue-600" /> My Listings
                     </button>
-                    <button
-                      onClick={() => handleNavigateOrScroll("/settings")}
-                      className="w-full flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 gap-2 transition"
-                    >
-                      <FaCog className="text-blue-600" /> Settings
-                    </button>
-                    <hr className="my-2 border-gray-200" />
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center px-4 py-2 text-red-600 hover:bg-red-50 gap-2 transition"
-                    >
-                      <FaSignOutAlt /> Logout
-                    </button>
-                  </div>
+                  )}
+
+                  {/* Other dropdown actions */}
+                  <button
+                    onClick={() => handleNavigateOrScroll("/profile")}
+                    className="w-full flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 gap-2 transition"
+                  >
+                    <FaUser className="text-blue-600" /> View Profile
+                  </button>
+                  <button
+                    onClick={() => handleNavigateOrScroll("/settings")}
+                    className="w-full flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 gap-2 transition"
+                  >
+                    <FaCog className="text-blue-600" /> Settings
+                  </button>
+                  <hr className="my-2 border-gray-200" />
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center px-4 py-2 text-red-600 hover:bg-red-50 gap-2 transition"
+                  >
+                    <FaSignOutAlt /> Logout
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -314,6 +328,24 @@ export default function Navbar() {
             {link.label}
           </button>
         ))}
+
+        {user && (
+          <button
+            onClick={() => {
+              setIsOpen(false);
+              // Navigate depending on role
+              if (userData?.role === "host") {
+                router.push("/host/listings");
+              } else {
+                router.push("/listings");
+              }
+            }}
+            className="py-2 flex items-center gap-2 text-gray-700 hover:text-blue-600 transition"
+          >
+            <FaList className="text-blue-600" /> My Listings
+          </button>
+        )}
+
         {!user && (
           <button
             onClick={() => handleNavigateOrScroll("/login")}
@@ -322,6 +354,7 @@ export default function Navbar() {
             Login
           </button>
         )}
+
         {user && (
           <>
             <button

@@ -18,6 +18,7 @@ export default function HostListingsPage() {
   const [user, setUser] = useState<any>(null);
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
 
   // -----------------------------
   // AUTH CHECK
@@ -67,15 +68,28 @@ export default function HostListingsPage() {
     );
     if (!confirmDelete) return;
 
+    // Optimistically remove from UI
+    setListings((prev) => prev.filter((l) => l.id !== listing.id));
+
     try {
-      // Only delete Firestore document, media is on Cloudinary
       await deleteDoc(doc(db, "hostSpaces", listing.id));
       alert("Listing deleted successfully!");
     } catch (err) {
       console.error(err);
       alert("Failed to delete listing.");
+      // Restore the listing if deletion failed
+      setListings((prev) => [...prev, listing]);
     }
   };
+
+  // -----------------------------
+  // FILTER LISTINGS
+  // -----------------------------
+  const filteredListings = listings.filter(
+    (l) =>
+      l.spaceType?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      l.location?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   // -----------------------------
   // UI
@@ -92,26 +106,35 @@ export default function HostListingsPage() {
           + Add New Listing
         </button>
 
+        {/* Search */}
+        <input
+          type="text"
+          placeholder="Search your listings by location or type..."
+          className="w-full mb-6 border rounded-lg p-3 text-gray-700"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+
         {loading ? (
-          <p>Loading...</p>
-        ) : listings.length === 0 ? (
+          <div className="flex justify-center mt-10">
+            <div className="w-10 h-10 border-4 border-gray-300 border-t-black rounded-full animate-spin"></div>
+          </div>
+        ) : filteredListings.length === 0 ? (
           <p className="text-gray-500 mt-6">You have no listings yet.</p>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {listings.map((item) => (
+            {filteredListings.map((item) => (
               <motion.div
                 key={item.id}
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-white shadow rounded-xl overflow-hidden"
               >
-                {item.media?.[0] && (
-                  <img
-                    src={item.media[0]}
-                    className="w-full h-40 object-cover"
-                    alt=""
-                  />
-                )}
+                <img
+                  src={item.media?.[0] || "/images/placeholder.jpg"}
+                  className="w-full h-40 object-cover"
+                  alt={item.spaceType || "Listing Image"}
+                />
 
                 <div className="p-4">
                   <h3 className="font-semibold text-lg">{item.spaceType}</h3>
