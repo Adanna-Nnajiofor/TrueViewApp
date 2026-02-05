@@ -1,33 +1,32 @@
 @import "tailwindcss";
 
-/* ------------------------ */
-/* Theme Variables          */
-/* ------------------------ */
-@theme {
-  --radius: 0.625rem;
-  --color-background: oklch(1 0 0);
-  --color-foreground: oklch(0.141 0.005 285.823);
-  --color-border: oklch(0.92 0.004 286.32);
-  --color-primary: oklch(0.21 0.006 285.885);
-  --color-secondary: oklch(0.967 0.001 286.375);
-  --color-muted: oklch(0.967 0.001 286.375);
+@layer base {
+  :root {
+    --radius: 0.625rem;
+
+    --color-background: oklch(1 0 0);
+    --color-foreground: oklch(0.141 0.005 285.823);
+    --color-border: oklch(0.92 0.004 286.32);
+    --color-primary: oklch(0.21 0.006 285.885);
+    --color-secondary: oklch(0.967 0.001 286.375);
+    --color-muted: oklch(0.967 0.001 286.375);
+  }
+
+  .dark {
+    --color-background: oklch(0.141 0.005 285.823);
+    --color-foreground: oklch(0.985 0 0);
+    --color-border: oklch(1 0 0 / 10%);
+    --color-primary: oklch(0.92 0.004 286.32);
+    --color-secondary: oklch(0.274 0.006 286.033);
+    --color-muted: oklch(0.274 0.006 286.033);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
 }
 
-/* ------------------------ */
-/* Dark Mode Variables      */
-/* ------------------------ */
-@variant dark {
-  --color-background: oklch(0.141 0.005 285.823);
-  --color-foreground: oklch(0.985 0 0);
-  --color-border: oklch(1 0 0 / 10%);
-  --color-primary: oklch(0.92 0.004 286.32);
-  --color-secondary: oklch(0.274 0.006 286.033);
-  --color-muted: oklch(0.274 0.006 286.033);
-}
-
-/* ------------------------ */
-/* Animation Utilities      */
-/* ------------------------ */
 @layer utilities {
   @keyframes slide-down {
     from {
@@ -43,27 +42,4 @@
   .animate-slide-down {
     animation: slide-down 0.3s ease-out;
   }
-}
-
-/* ------------------------ */
-/* Base Layer Styles        */
-/* ------------------------ */
-@layer base {
-  * {
-    @apply border-border;
-  }
-
-  body {
-    @apply bg-background text-foreground;
-  }
-}
-
-/* Optional custom styling for the shadcn slider */
-[data-slider] {
-  --slider-track-height: 6px;
-}
-[data-slider-thumb] {
-  width: 20px;
-  height: 20px;
-  background-color: #4f46e5; /* Indigo-600 */
 }
